@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Voice Kids - Simulator Sodnika</title>
+    <style>
+        :root {
+            --primary: #d32f2f; /* Voice rdeča */
+            --dark: #121212;
+            --stage-bg: #000;
+            --chair: #333;
+            --light: #fff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--dark);
+            color: var(--light);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ZGORNJI DEL - ODER IN VIDEO */
+        #stage-container {
+            flex: 2;
+            position: relative;
+            background-color: var(--stage-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 5px solid var(--primary);
+            overflow: hidden;
+        }
+
+        /* YouTube Iframe container */
+        #player {
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Prepreči klikanje po videu, da ne goljufaš */
+        }
+
+        /* "Hrbet stola" - prekriva video */
+        #chair-back-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, #2a2a2a 0%, #000 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            transition: transform 1.5s ease-in-out, opacity 1s;
+            transform-origin: center bottom;
+        }
+
+        #chair-back-overlay.turned {
+            transform: perspective(1000px) rotateY(180deg); /* Simulacija obrata */
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .chair-text {
+            font-size: 3rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            color: #555;
+            text-shadow: 0 0 10px black;
+        }
+        
+        .status-msg {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            color: var(--primary);
+            animation: pulse 2s infinite;
+        }
+
+        /* SPODNJI DEL - SODNIKI */
+        #judges-panel {
+            flex: 1;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            background: linear-gradient(to top, #0f0f0f, #222);
+            padding: 20px;
+        }
+
+        .judge-station {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 18%;
+        }
+
+        .judge-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: #444;
+            border: 3px solid #666;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            position: relative;
+        }
+
+        .judge-name {
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        /* Robot Turn Indicator */
+        .turned-status {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #444;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            padding: 5px 10px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .judge-station.active .judge-avatar {
+            border-color: var(--light);
+            box-shadow: 0 0 20px var(--light);
+        }
+
+        .judge-station.active .turned-status {
+            background-color: var(--light);
+            color: var(--primary);
+            border-color: var(--light);
+            box-shadow: 0 0 15px rgba(255,255,255,0.5);
+            content: "I WANT YOU";
+        }
+
+        /* IGRALČEV GUMB */
+        #my-station {
+            width: 25%;
+            transform: scale(1.1);
+        }
+
+        #buzzer-btn {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ff5252 0%, #b71c1c 100%);
+            border: 8px solid #5f0f0f;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.8), inset 0 5px 10px rgba(255,255,255,0.3);
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+            font-weight: 900;
+            font-size: 1.5rem;
+            line-height: 1.2;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        #buzzer-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.8);
+        }
+
+        #buzzer-btn.disabled {
+            filter: grayscale(100%);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* INFO PANEL */
+        #game-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            z-index: 20;
+            text-align: right;
+        }
+
+        #start-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .btn-start {
+            padding: 20px 40px;
+            font-size: 1.5rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        
+        .btn-reset {
+            margin-top: 10px;
+            background: transparent;
+            border: 1px solid #666;
+            color: #888;
+            font-size: 0.8rem;
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+        
+        /* Obvestila */
+        #notification {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(211, 47, 47, 0.9);
+            padding: 30px;
+            font-size: 2rem;
+            font-weight: bold;
+            z-index: 50;
+            display: none;
+            text-align: center;
+            border: 2px solid white;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-overlay">
+        <h1 style="color:white; font-size: 3rem; margin-bottom: 10px;">THE VOICE <span style="color:var(--primary)">KIDS</span></h1>
+        <p style="color:#aaa; margin-bottom: 30px;">Si pripravljen postati sodnik?</p>
+        <button class="btn-start" onclick="startGame()">ZAČNI NOVO EPIZODO</button>
+        <button class="btn-reset" onclick="resetProgress()">Ponastavi igro (Izbriši shranjeno)</button>
+    </div>
+
+    <div id="notification"></div>
+
+    <div id="game-info">
+        <div>Krog: <span id="round-display">Avdicije</span></div>
+        <div>Kandidat: <span id="candidate-display">1</span></div>
+        <div>Tvoja ekipa: <span id="team-count">0</span></div>
+    </div>
+
+    <div id="stage-container">
+        <div id="player"></div>
+
+        <div id="chair-back-overlay">
+            <div class="chair-text">Samo poslušaj...</div>
+            <div class="status-msg" id="listening-status">Kandidat poje</div>
+        </div>
+    </div>
+
+    <div id="judges-panel">
+        <div class="judge-station" id="bot1">
+            <div class="judge-avatar">🤖</div>
+            <div class="judge-name">Robot Niko</div>
+            <div class="turned-status">Čaka</div>
+        </div>
+
+        <div class="judge-station" id="bot2">
+            <div class="judge-avatar">👽</div>
+            <div class="judge-name">AI Ana</div>
+            <div class="turned-status">Čaka</div>
+        </div>
+
+        <div class="judge-station" id="my-station">
+            <div id="buzzer-btn" onclick="playerBuzz()">
+                I WANT<br>YOU
+            </div>
+            <div class="judge-name" style="margin-top:10px; font-size: 1.2rem; color: var(--primary);">TI (Sodnik)</div>
+        </div>
+
+        <div class="judge-station" id="bot3">
+            <div class="judge-avatar">👾</div>
+            <div class="judge-name">Bot Luka</div>
+            <div class="turned-status">Čaka</div>
+        </div>
+    </div>
+
+<script>
+    // --- KONFIGURACIJA IN PODATKI ---
+    // Seznam YouTube ID-jev pravih The Voice Kids nastopov
+    const playList = [
+        { id: "M0XQz9tQ8V4", name: "Dance Monkey - Mimi" }, 
+        { id: "I5z0W-r4kC0", name: "Girl on Fire - Chelsea" },
+        { id: "e1y7cQ4L7wA", name: "Bohemian Rhapsody - Tilman" },
+        { id: "s-Tw5uQyNTA", name: "Flashlight - Laura" },
+        { id: "uV2Xh6rP2bU", name: "I Will Always Love You - Laura" },
+        { id: "f2v4_q8P1n0", name: "Shallow - The Voice Kids" }
+    ];
+
+    // Stanje igre
+    let gameState = {
+        currentIndex: 0,
+        myTeam: [],
+        round: "Blind Auditions"
+    };
+
+    // Spremenljivke seje
+    let player; // YouTube player
+    let timerInterval;
+    let botInterval;
+    let hasPlayerTurned = false;
+    let currentVideoDuration = 0;
+    let isRoundActive = false;
+    let botStatus = [false, false, false]; // Status robotov
+
+    // --- LOCAL STORAGE ---
+    function loadGame() {
+        const saved = localStorage.getItem('voiceKidsSave');
+        if (saved) {
+            gameState = JSON.parse(saved);
+        }
+        updateUI();
+    }
+
+    function saveGame() {
+        localStorage.setItem('voiceKidsSave', JSON.stringify(gameState));
+        updateUI();
+    }
+
+    function resetProgress() {
+        localStorage.removeItem('voiceKidsSave');
+        location.reload();
+    }
+
+    // --- YOUTUBE API SETUP ---
+    // Ta koda naloži API asinhrono
+    var tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    function onYouTubeIframeAPIReady() {
+        // Player se inicializira, ko uporabnik klikne START, da preprečimo avtoplay težave
+    }
+
+    // --- LOGIKA IGRE ---
+
+    function startGame() {
+        document.getElementById('start-overlay').style.display = 'none';
+        loadGame();
+        
+        // Če smo prišli do konca seznama
+        if (gameState.currentIndex >= playList.length) {
+            showNotification("KONEC AVDICIJ! TVOJA EKIPA JE POLNA!");
+            return;
+        }
+
+        initRound();
+    }
+
+    function initRound() {
+        const songId = playList[gameState.currentIndex].id;
+        
+        // Reset vizualij
+        hasPlayerTurned = false;
+        botStatus = [false, false, false];
+        isRoundActive = true;
+        
+        document.getElementById('chair-back-overlay').classList.remove('turned');
+        document.getElementById('buzzer-btn').classList.remove('disabled');
+        document.getElementById('listening-status').innerText = "Kandidat poje...";
+        
+        // Reset botov UI
+        [1, 2, 3].forEach(i => {
+            const el = document.getElementById(`bot${i}`);
+            el.classList.remove('active');
+            el.querySelector('.turned-status').innerText = "Čaka";
+        });
+
+        // Naloži video
+        if (player) {
+            player.loadVideoById(songId);
+        } else {
+            player = new YT.Player('player', {
+                height: '100%',
+                width: '100%',
+                videoId: songId,
+                playerVars: {
+                    'playsinline': 1,
+                    'controls': 0, // Brez kontrol
+                    'showinfo': 0,
+                    'rel': 0,
+                    'modestbranding': 1
+                },
+                events: {
+                    'onStateChange': onPlayerStateChange,
+                    'onReady': onPlayerReady
+                }
+            });
+        }
+    }
+
+    function onPlayerReady(event) {
+        event.target.playVideo();
+        startTimers();
+    }
+
+    function onPlayerStateChange(event) {
+        if (event.data == YT.PlayerState.PLAYING) {
+            currentVideoDuration = player.getDuration();
+            startTimers();
+        }
+        if (event.data == YT.PlayerState.ENDED) {
+            endRound(false); // Pesem se je končala
+        }
+    }
+
+    function startTimers() {
+        clearInterval(timerInterval);
+        clearInterval(botInterval);
+
+        // Timer za preverjanje časa (15 sekund pravilo) in botov
+        timerInterval = setInterval(() => {
+            if (!player || !player.getCurrentTime) return;
+            
+            const currentTime = player.getCurrentTime();
+            const duration = player.getDuration();
+            const timeLeft = duration - currentTime;
+
+            // Logika za zadnjih 15 sekund
+            if (timeLeft < 15 && timeLeft > 0 && !hasPlayerTurned) {
+                // Če se igralec še ni obrnil, pokaži video, ampak onemogoči gumb
+                document.getElementById('chair-back-overlay').classList.add('turned');
+                document.getElementById('buzzer-btn').classList.add('disabled');
+                document.getElementById('listening-status').innerText = "PREPOZNO! Gledamo nastop...";
+                // V tem primeru se stol obrne, ampak igralec ni glasoval
+            }
+
+        }, 1000);
+
+        // Logika za bote (vsake 2 sekundi preveri, če se kdo obrne)
+        botInterval = setInterval(() => {
+            if (!isRoundActive) return;
+
+            // Vsak bot ima majhno možnost, da se obrne
+            [0, 1, 2].forEach((botIndex) => {
+                if (!botStatus[botIndex]) { // Če se še ni obrnil
+                    // Random logika: 5% možnost vsaki 2 sekundi
+                    if (Math.random() < 0.05) { 
+                        botTurn(botIndex + 1);
+                    }
+                }
+            });
+        }, 2000);
+    }
+
+    function botTurn(botNum) {
+        botStatus[botNum - 1] = true;
+        const botEl = document.getElementById(`bot${botNum}`);
+        botEl.classList.add('active');
+        botEl.querySelector('.turned-status').innerText = "I WANT YOU!";
+        // Predvajaj zvok buzzerja? (Opcijsko)
+    }
+
+    // --- IGRALČEVA AKCIJA ---
+    function playerBuzz() {
+        if (!isRoundActive || hasPlayerTurned) return;
+        
+        // Preveri, če je prepozno (zadnjih 15s)
+        const timeLeft = player.getDuration() - player.getCurrentTime();
+        if (timeLeft < 15) return; 
+
+        hasPlayerTurned = true;
+        
+        // UI spremembe
+        document.getElementById('buzzer-btn').style.transform = "scale(0.9)";
+        setTimeout(() => document.getElementById('buzzer-btn').style.transform = "scale(1.1)", 150);
+        
+        document.getElementById('chair-back-overlay').classList.add('turned'); // Odgrni zaveso
+        
+        showNotification("I WANT YOU!");
+        setTimeout(() => { document.getElementById('notification').style.display = 'none'; }, 2000);
+    }
+
+    function endRound(manualStop) {
+        clearInterval(timerInterval);
+        clearInterval(botInterval);
+        isRoundActive = false;
+
+        // Pokaži video do konca, če še ni bil odkrit
+        document.getElementById('chair-back-overlay').classList.add('turned');
+
+        // Rezultat
+        let resultMessage = "";
+        let buttonText = "NASLEDNJI KROG";
+
+        if (hasPlayerTurned) {
+            // Dodaj v ekipo
+            const currentSong = playList[gameState.currentIndex];
+            gameState.myTeam.push(currentSong);
+            resultMessage = `Bravo! ${currentSong.name} je v tvoji ekipi!`;
+        } else {
+            resultMessage = "Nisi se obrnil pravočasno. Kandidat je izpadel (ali šel k botom).";
+        }
+
+        // Pokaži overlay za naslednji krog
+        setTimeout(() => {
+            const overlay = document.getElementById('start-overlay');
+            overlay.innerHTML = `
+                <h2 style="color:white; text-align:center">${resultMessage}</h2>
+                <button class="btn-start" onclick="nextRound()">${buttonText}</button>
+            `;
+            overlay.style.display = 'flex';
+        }, 2000); // Počakaj 2 sekundi po koncu pesmi
+    }
+
+    function nextRound() {
+        gameState.currentIndex++;
+        saveGame();
+        
+        // Reset overlay content for next time
+        const overlay = document.getElementById('start-overlay');
+        overlay.style.display = 'none';
+        
+        // Preveri če je konec vseh pesmi
+        if (gameState.currentIndex >= playList.length) {
+            alert("Konec sezone! Zbral si " + gameState.myTeam.length + " pevcev.");
+            resetProgress();
+        } else {
+            initRound();
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('candidate-display').innerText = (gameState.currentIndex + 1) + " / " + playList.length;
+        document.getElementById('team-count').innerText = gameState.myTeam.length;
+    }
+    
+    // Dodatno: zaznaj če se video ustavi sam od sebe (YOUTUBE quirks)
+    window.setInterval(function() {
+        if(player && player.getPlayerState && player.getPlayerState() === 0) { // 0 je 'ended'
+             if(isRoundActive) endRound(false);
+        }
+    }, 1000);
+
+</script>
+
+</body>
+</html>
