@@ -53,6 +53,12 @@
             overflow: hidden;
         }
 
+        #ytplayer {
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Prepreči klikanje po videu */
+        }
+
         #video-overlay {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -65,6 +71,7 @@
             justify-content: center;
             font-size: 20px;
             color: #ddd;
+            pointer-events: none; /* Da kliki gredo skozi, če je treba */
         }
 
         #video-overlay h2 {
@@ -74,7 +81,6 @@
 
         .revealed #video-overlay {
             opacity: 0;
-            pointer-events: none;
         }
 
         /* Judges Chairs */
@@ -204,6 +210,12 @@
         }
 
         .btn:hover { background: #ff1f2a; }
+        
+        .btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
 
         #result-screen {
             position: fixed;
@@ -226,7 +238,6 @@
         }
 
     </style>
-    <script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body>
 
@@ -237,7 +248,7 @@
 
     <div class="main-content">
         
-        <button id="start-btn" class="btn" onclick="startPerformance()">ZAČNI NASTOP</button>
+        <button id="start-btn" class="btn" onclick="startPerformance()" disabled>Nalaganje odra...</button>
 
         <div id="stage">
             <div id="ytplayer"></div>
@@ -286,8 +297,8 @@
         <button class="btn" onclick="nextRound()">Nadaljuj</button>
     </div>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script>
-        // Logika in stanje igre
         const rounds = [
             "1. KROG (Slepe avdicije)", 
             "OSMINA FINALA", 
@@ -296,14 +307,13 @@
             "FINALE"
         ];
 
-        // Realni The Voice Kids YouTube ID-ji (Laura Kamhuber, Lara H, Courtney Hadwin, Daneliya, Tillmann)
+        // Veljavni The Voice Kids posnetki (zanimive slepe avdicije)
         const ytVideos = [
-            "QWcpoQirMoU", 
-            "7MAo4gm5yNo", 
-            "QhD1v8GqT6E", 
-            "ZzQ15c-0q1A", 
-            "K8yP0kI_02Q",
-            "bNfWJ4p8QvA"
+            "QWcpoQirMoU", // Laura Kamhuber
+            "7MAo4gm5yNo", // Lara H
+            "syx-prjBaCw", // Laura (druga verzija)
+            "wSAfCDb-m9Q", // Kompilacija 2024
+            "Jn9OVrZBOhA"  // Kompilacija 2023
         ];
 
         let player;
@@ -312,8 +322,33 @@
         let userVoted = false;
         let checkInterval;
         let botTimeouts = [];
+        let ytReady = false;
 
-        // Upravljanje z LocalStorage (Da se zares shrani tvoj napredek)
+        // Inicializacija YouTube predvajalnika ob zagonu
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('ytplayer', {
+                height: '100%',
+                width: '100%',
+                playerVars: {
+                    'playsinline': 1,
+                    'controls': 0, // Brez preklapljanja in goljufanja s časom
+                    'disablekb': 1,
+                    'rel': 0,
+                    'fs': 0
+                },
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            ytReady = true;
+            updateUI(); // Sedaj omogočimo gumb "Začni"
+            console.log("YouTube Player je pripravljen.");
+        }
+
         function loadState() {
             let state = localStorage.getItem('voiceKidsState');
             if (state) {
@@ -326,7 +361,6 @@
             localStorage.setItem('voiceKidsState', JSON.stringify(state));
         }
 
-        // Osveževanje uporabniškega vmesnika glede na to, kje smo
         function updateUI() {
             let state = loadState();
             let roundDisplay = document.getElementById('round-display');
@@ -337,74 +371,51 @@
                 startBtn.style.display = 'none';
             } else {
                 roundDisplay.innerText = "Trenutni nivo: " + rounds[state.round];
-                startBtn.style.display = 'inline-block';
-                startBtn.innerText = "ZAČNI NASTOP (" + rounds[state.round] + ")";
+                
+                if (ytReady) {
+                    startBtn.style.display = 'inline-block';
+                    startBtn.disabled = false;
+                    startBtn.innerText = "ZAČNI NASTOP (" + rounds[state.round] + ")";
+                }
             }
         }
 
-        // Ta funkcija mora biti globalno dostopna za YouTube API
-        function onYouTubeIframeAPIReady() {
-            // Player se bo inicializiral, ko klikneš "Začni nastop"
-            console.log("YouTube API je pripravljen.");
-        }
-
         function startPerformance() {
+            if (!ytReady) return;
+
             let vidId = ytVideos[Math.floor(Math.random() * ytVideos.length)];
             
             document.getElementById('start-btn').style.display = 'none';
             document.getElementById('result-screen').style.display = 'none';
             document.getElementById('buzzer').classList.add('disabled');
             
-            // Resetiranje stanja za nov nastop
             userTurned = false;
             userVoted = false;
             isPlaying = false;
             
-            // Počisti stara preverjanja časa
             botTimeouts.forEach(clearTimeout);
             botTimeouts = [];
             clearInterval(checkInterval);
             
-            // Resetiraj vizualne razrede stolov in zaslona
             document.querySelectorAll('.chair').forEach(c => c.classList.remove('turned'));
             document.getElementById('stage').classList.remove('revealed');
             
-            if (!player) {
-                player = new YT.Player('ytplayer', {
-                    height: '360',
-                    width: '640',
-                    videoId: vidId,
-                    playerVars: {
-                        'playsinline': 1,
-                        'controls': 0, // Brez kontrol (da ne goljufaš s časom)
-                        'disablekb': 1,
-                        'rel': 0
-                    },
-                    events: {
-                        'onReady': (event) => { event.target.playVideo(); },
-                        'onStateChange': onPlayerStateChange
-                    }
-                });
-            } else {
-                player.loadVideoById(vidId);
-            }
+            // Naloži in takoj začni predvajati
+            player.loadVideoById({videoId: vidId});
         }
 
         function onPlayerStateChange(event) {
-            // Ko se video dejansko začne predvajati
             if (event.data == YT.PlayerState.PLAYING && !isPlaying) {
                 isPlaying = true;
                 let duration = player.getDuration();
                 
+                // Omogoči tvoj gumb, ko se glasba dejansko sliši
                 document.getElementById('buzzer').classList.remove('disabled');
                 
-                // Sproži robote z naključnimi časi
                 scheduleBots(duration);
-                
-                // Začni preverjati čas za tistih famoznih "zadnjih 15 sekund"
                 checkInterval = setInterval(checkTime, 1000);
             }
-            // Ko se pesem konča
+            
             if (event.data == YT.PlayerState.ENDED) {
                 endPerformance();
             }
@@ -414,7 +425,7 @@
             if (userTurned || !isPlaying) return;
             
             userTurned = true;
-            userVoted = true; // Glas je oddan s stiskom gumba!
+            userVoted = true; 
             
             document.getElementById('chair-player').classList.add('turned');
             document.getElementById('stage').classList.add('revealed');
@@ -428,11 +439,11 @@
             let curr = player.getCurrentTime();
             let dur = player.getDuration();
             
-            // Logika zadnjih 15 sekund!
+            // Če se do konca pesmi ne obrneš (15 sekund do konca)
             if (dur > 0 && (dur - curr) <= 15) {
                 if (!userTurned) {
                     userTurned = true;
-                    userVoted = false; // Avtomatski obrat, brez glasu!
+                    userVoted = false; 
                     
                     document.getElementById('chair-player').classList.add('turned');
                     document.getElementById('stage').classList.add('revealed');
@@ -444,10 +455,9 @@
         function scheduleBots(duration) {
             const bots = ['chair-bot1', 'chair-bot2', 'chair-bot3'];
             bots.forEach(bot => {
-                // Roboti pritisnejo vmes, preden se zgodi prisilni 15s obrat
                 let min = 15;
-                let max = duration - 20; 
-                if (max <= min) max = min + 10;
+                let max = duration > 40 ? duration - 20 : duration - 5; 
+                if (max <= min) max = min + 5;
                 
                 let randomTime = Math.random() * (max - min) + min;
                 
@@ -480,11 +490,11 @@
             
             document.getElementById('result-message').innerText = message;
             document.getElementById('result-screen').style.display = 'block';
+            document.getElementById('start-btn').style.display = 'inline-block';
         }
 
         function nextRound() {
             document.getElementById('result-screen').style.display = 'none';
-            // Osveži UI
             updateUI();
         }
 
@@ -501,7 +511,6 @@
             }
         }
 
-        // Ko se stran naloži, nastavimo UI
         window.onload = function() {
             updateUI();
         }
